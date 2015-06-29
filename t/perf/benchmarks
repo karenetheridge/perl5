@@ -242,4 +242,10 @@
         code    => 'index $x, "b"',
     },
 
+    'loop::for_lex' => {
+        desc    => 'empty for loop with lexical var',
+        setup   => '',
+        code    => 'for my $x (1..10) {}',
+    },
+
 ];
