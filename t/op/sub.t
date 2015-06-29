@@ -6,7 +6,7 @@ BEGIN {
     set_up_inc('../lib');
 }
 
-plan(tests => 55);
+plan(tests => 56);
 
 sub empty_sub {}
 
@@ -294,6 +294,33 @@ inside_predeclared(); # run test
     # as opposed to $@ eq "Can't undef active subroutine"
     ::is($@, "outer\n", "RT124156 depth");
     ::is($destroyed, 1, "RT124156 freed cv");
+}
+
+# trapping dying while popping a scope needs to have the right pad at all
+# times. Localising a tied array then dying in STORE raises an exception
+# while leaving g(). Note that using an object and destructor wouldn't be
+# sufficient since DESTROY is called with call_sv(...,G_EVAL).
+# We make sure that the first item in every sub's pad is a lexical with
+# different values per sub.
+
+{
+    package tie_exception;
+    sub TIEARRAY { my $x = 4; bless [0] }
+    sub FETCH    { my $x = 5; 1 }
+    sub STORE    { my $x = 6; die if $_[0][0]; $_[0][0] = 1 }
+
+    my $y;
+    sub f { my $x = 7; eval { g() }; $y = $x }
+    sub g {
+        my $x = 8;
+        my @a;
+        tie @a, "tie_exception";
+        local $a[0];
+    }
+
+    f();
+    local $::TODO = "sub unwinding not safe yet";
+    ::is($y, 7, "tie_exception");
 }
 
 
