@@ -319,7 +319,6 @@ inside_predeclared(); # run test
     }
 
     f();
-    local $::TODO = "sub unwinding not safe yet";
     ::is($y, 7, "tie_exception");
 }
 
