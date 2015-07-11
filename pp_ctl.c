@@ -1986,7 +1986,6 @@ PP(pp_dbstate)
 	else {
 	    PUSHBLOCK(cx, CXt_SUB, SP);
 	    PUSHSUB_DB(cx);
-            SAVETMPS;
 	    cx->blk_sub.retop = PL_op->op_next;
 	    CvDEPTH(cv)++;
 	    if (CvDEPTH(cv) >= 2) {
@@ -2844,7 +2843,6 @@ PP(pp_goto)
 	    else {
 		PADLIST * const padlist = CvPADLIST(cv);
 
-                SAVETMPS;
                 SAVEFREESV(cv); /* later, undo the 'avoid premature free' hack */
 
                 /* partial unrolled PUSHSUB(): */
