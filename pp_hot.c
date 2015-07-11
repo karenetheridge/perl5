@@ -3193,6 +3193,8 @@ PP(pp_entersub)
 
 	PUSHBLOCK(cx, CXt_SUB, MARK);
 	PUSHSUB(cx);
+	SAVETMPS;
+
 	cx->blk_sub.retop = PL_op->op_next;
 	if (UNLIKELY((depth = ++CvDEPTH(cv)) >= 2)) {
 	    PERL_STACK_OVERFLOW_CHECK();
@@ -3225,7 +3227,6 @@ PP(pp_entersub)
 	    Copy(MARK+1,AvARRAY(av),items,SV*);
 	    AvFILLp(av) = items - 1;
 	}
-	SAVETMPS;
 	if (UNLIKELY((cx->blk_u16 & OPpENTERSUB_LVAL_MASK) == OPpLVAL_INTRO &&
 	    !CvLVALUE(cv)))
 	    DIE(aTHX_ "Can't modify non-lvalue subroutine call");
