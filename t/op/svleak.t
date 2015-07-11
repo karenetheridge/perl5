@@ -15,7 +15,7 @@ BEGIN {
 
 use Config;
 
-plan tests => 129;
+plan tests => 130;
 
 # run some code N times. If the number of SVs at the end of loop N is
 # greater than (N-1)*delta at the end of loop 1, we've got a leak
@@ -493,3 +493,24 @@ $x = $mdr::a[0]{foo}{$mdr::k}{$mdr::i};
 $x = $mdr::h[0]{foo}{$mdr::k}{$mdr::i};
 $x = $mdr::r->[0]{foo}{$mdr::k}{$mdr::i};
 EOF
+
+# check that @_ isn't leaked when dieing while goto'ing a new sub
+
+{
+    package my_goto;
+    sub TIEARRAY { bless [] }
+    sub FETCH { 1 }
+    sub STORE { die if $_[0][0]; $_[0][0] = 1 }
+
+    sub f { eval { g() } }
+    sub g {
+        my @a;
+        tie @a, "my_goto";
+        local $a[0];
+        goto &h;
+    }
+    sub h {}
+
+    local $::TODO = "dying while gotoing not fixed yet";
+    ::leak(5, 0, \&f, q{goto shouldn't leak @_});
+}
