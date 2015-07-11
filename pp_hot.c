@@ -3108,10 +3108,7 @@ PP(pp_entersub)
 
     ENTER;
 
-  retry:
-    if (UNLIKELY(CvCLONE(cv) && ! CvCLONED(cv)))
-	DIE(aTHX_ "Closure prototype called");
-    if (UNLIKELY(!CvROOT(cv) && !CvXSUB(cv))) {
+    while (UNLIKELY(!CvROOT(cv) && !CvXSUB(cv))) {
 	GV* autogv;
 	SV* sub_name;
 
@@ -3144,8 +3141,10 @@ PP(pp_entersub)
 	}
 	if (!cv)
 	    goto sorry;
-	goto retry;
     }
+
+    if (UNLIKELY(CvCLONE(cv) && ! CvCLONED(cv)))
+	DIE(aTHX_ "Closure prototype called");
 
     if (UNLIKELY((PL_op->op_private & OPpENTERSUB_DB) && GvCV(PL_DBsub)
             && !CvNODEBUG(cv)))
