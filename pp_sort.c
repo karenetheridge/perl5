@@ -1643,7 +1643,6 @@ PP(pp_sort)
 	    SV** newsp;
 	    const bool oldcatch = CATCH_GET;
 
-	    SAVETMPS;
 	    SAVEOP();
 
 	    CATCH_SET(TRUE);
@@ -1666,6 +1665,7 @@ PP(pp_sort)
 	    if (!(flags & OPf_SPECIAL)) {
 		cx->cx_type = CXt_SUB;
 		PUSHSUB(cx);
+                SAVETMPS;
 		if (!is_xsub) {
 		    PADLIST * const padlist = CvPADLIST(cv);
 
@@ -1685,6 +1685,9 @@ PP(pp_sort)
 
 		}
 	    }
+            else
+                SAVETMPS;
+
 	    cx->cx_type |= CXp_MULTICALL;
 	    
 	    start = p1 - max;
