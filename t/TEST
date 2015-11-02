@@ -447,7 +447,7 @@ unless (@ARGV) {
 	_find_tests($dir);
     }
     unless ($::core) {
-	_find_tests('porting');
+	#_find_tests('porting');
 	_find_tests("lib"); 
     }
     # Config.pm may be broken for make minitest. And this is only a refinement
