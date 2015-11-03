@@ -17,7 +17,7 @@ use File::Spec;
 
 no warnings 'utf8';
 
-our $VERSION = '1.15';
+our $VERSION = '1.14';
 our $PACKAGE = __PACKAGE__;
 
 ### begin XS only ###
@@ -104,13 +104,6 @@ sub unpack_U {
 }
 
 ######
-
-
-sub _unpack_W {
-    # Takes a native string, converting it Unicode UTF-8 which the rest of the
-    # process uses.
-    return unpack('W*', shift(@_).pack('U*'));
-}
 
 my (%VariableOK);
 @VariableOK{ qw/
@@ -500,10 +493,8 @@ sub splitEnt
 
     my @buf;
 
-    # get array of Unicode code points of string,
-    # which is always in the native character set.
-    # The empty pack(U*) forces it to be UTF-8.
-    my @src = _unpack_W($str);
+    # get array of Unicode code point of string.
+    my @src = unpack_U($str);
 
     # rearrangement:
     # Character positions are not kept if rearranged,
@@ -756,7 +747,7 @@ sub getSortKey
 
     if ($iden || $vers >= 26 && $lev == MaxLevel) {
 	$rkey .= LEVEL_SEP;
-	$rkey .= pack(TIE_TEMPLATE, _unpack_W($str)) if $iden;
+	$rkey .= pack(TIE_TEMPLATE, unpack_U($str)) if $iden;
     }
     return $rkey;
 }
@@ -1266,9 +1257,9 @@ Completely ignorable characters are ignored.
 
 If the parameter is made true, a final, tie-breaking level is used.
 If no difference of weights is found after the comparison through
-all the level specified by C<level>, a comparison with Unicode code points
+all the level specified by C<level>, the comparison with code points
 will be performed.
-For the tie-breaking comparison, the sort key has the code points
+For the tie-breaking comparison, the sort key has code points
 of the original string appended.
 Completely ignorable characters are not ignored.
 
