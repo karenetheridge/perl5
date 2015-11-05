@@ -9,6 +9,8 @@ BEGIN {
       exit 0;
     }
     if (ord("A") == 193) {
+        # This file is encoded partially in CN, won't get translated properly
+        # to EBCDIC
     print "1..0 # Skip: EBCDIC\n";
     exit 0;
     }

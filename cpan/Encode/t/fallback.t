@@ -8,11 +8,15 @@ BEGIN {
       print "1..0 # Skip: Encode was not built\n";
       exit 0;
     }
-    if (ord("A") == 193) {
-    print "1..0 # Skip: EBCDIC\n";
-    exit 0;
-    }
+    #if (ord("A") == 193) {
+    #print "1..0 # Skip: EBCDIC\n";
+    #exit 0;
+    #}
     $| = 1;
+}
+
+sub to_native($) {
+    return utf8::unicode_to_native(shift);
 }
 
 use strict;
@@ -24,7 +28,7 @@ my $uo = '';
 my $nf  = '';
 my ($af, $aq, $ap, $ah, $ax, $uf, $uq, $up, $uh, $ux, $ac, $uc);
 for my $i (0x20..0x7e){
-    $uo .= chr($i);
+    $uo .= chr(to_native($i));
 }
 $af = $aq = $ap = $ah = $ax = $ac =
 $uf = $uq = $up = $uh = $ux = $uc =
@@ -32,6 +36,7 @@ $nf = $uo;
 
 my $residue = '';
 for my $i (0x80..0xff){
+    $i = to_native($i);
     $uo   .= chr($i);
     $residue    .= chr($i);
     $af .= '?';
