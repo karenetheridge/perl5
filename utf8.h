@@ -265,18 +265,6 @@ Perl's extended UTF-8 means we can have start bytes up to FF.
 #   define __BASE_UNI_SKIP(uv) (__COMMON_UNI_SKIP(uv) 7)
 #endif
 
-#define OFFUNISKIP(uv) ( OFFUNI_IS_INVARIANT(uv) ? 1 : __BASE_UNI_SKIP(uv))
-/*
-
-=for apidoc Am|STRLEN|UVCHR_SKIP|UV cp
-returns the number of bytes required to represent the code point C<cp> when
-encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
-255; a Unicode code point otherwise.
-
-=cut
- */
-#define UVCHR_SKIP(uv) ( UVCHR_IS_INVARIANT(uv) ? 1 : __BASE_UNI_SKIP(uv))
-
 /* ^? is defined to be DEL on ASCII systems.  See the definition of toCTRL()
  * for more */
 #define QUESTION_MARK_CTRL  DEL_NATIVE
@@ -291,6 +279,18 @@ encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
 
 /* 2**UTF_ACCUMULATION_SHIFT - 1 */
 #define UTF_CONTINUATION_MASK  ((U8) ((1U << UTF_ACCUMULATION_SHIFT) - 1))
+
+#define OFFUNISKIP(uv) ( OFFUNI_IS_INVARIANT(uv) ? 1 : __BASE_UNI_SKIP(uv))
+/*
+
+=for apidoc Am|STRLEN|UVCHR_SKIP|UV cp
+returns the number of bytes required to represent the code point C<cp> when
+encoded as UTF-8.  C<cp> is a native (ASCII or EBCDIC) code point if less than
+255; a Unicode code point otherwise.
+
+=cut
+ */
+#define UVCHR_SKIP(uv) ( UVCHR_IS_INVARIANT(uv) ? 1 : __BASE_UNI_SKIP(uv))
 
 /* 32 start bytes with
  * UTF_ACCUMULATION_SHIFT bits of information each */
