@@ -530,6 +530,36 @@ Perl_is_utf8_string_loclen(const U8 *s, STRLEN len, const U8 **ep, STRLEN *el)
     return (x == send);
 }
 
+#define THREE_BYTE_UTF8_TO_NATIVE(s)                                           \
+    UNI_TO_NATIVE(                                                             \
+        ((NATIVE_UTF8_TO_I8(* s   ) & UTF_START_MASK(3)) << ((3 - 1) * SHIFT)) \
+      | ((NATIVE_UTF8_TO_I8(*(s+1)) & MASK) << ((2 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+2)) & MASK)));
+
+#define FOUR_BYTE_UTF8_TO_NATIVE(s)                                            \
+    UNI_TO_NATIVE(                                                             \
+        ((NATIVE_UTF8_TO_I8(* s   ) & UTF_START_MASK(4)) << ((4 - 1) * SHIFT)) \
+      | ((NATIVE_UTF8_TO_I8(*(s+1)) & MASK) << ((3 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+2)) & MASK) << ((2 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+3)) & MASK)));
+
+#define FIVE_BYTE_UTF8_TO_NATIVE(s)                                            \
+    UNI_TO_NATIVE(                                                             \
+        ((NATIVE_UTF8_TO_I8(* s   ) & UTF_START_MASK(5)) << ((5 - 1) * SHIFT)) \
+      | ((NATIVE_UTF8_TO_I8(*(s+1)) & MASK) << ((4 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+2)) & MASK) << ((3 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+3)) & MASK) << ((2 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+4)) & MASK)));
+
+#define SIX_BYTE_UTF8_TO_NATIVE(s)                                             \
+    UNI_TO_NATIVE(                                                             \
+        ((NATIVE_UTF8_TO_I8(* s   ) & UTF_START_MASK(6)) << ((6 - 1) * SHIFT)) \
+      | ((NATIVE_UTF8_TO_I8(*(s+1)) & MASK) << ((5 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+2)) & MASK) << ((4 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+3)) & MASK) << ((3 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+4)) & MASK) << ((2 - 1) * SHIFT))              \
+      | ((NATIVE_UTF8_TO_I8(*(s+5)) & MASK)));
+
 /*
 
 =for apidoc utf8n_to_uvchr
@@ -1046,9 +1076,7 @@ Perl_utf8_to_uvchr_buf(pTHX_ const U8 *s, const U8 *send, STRLEN *retlen)
 UV
 Perl_valid_utf8_to_uvchr(pTHX_ const U8 *s, STRLEN *retlen)
 {
-    UV expectlen = UTF8SKIP(s);
-    const U8* send = s + expectlen;
-    UV uv = *s;
+    const UV expectlen = UTF8SKIP(s);
 
     PERL_ARGS_ASSERT_VALID_UTF8_TO_UVCHR;
     PERL_UNUSED_CONTEXT;
@@ -1057,28 +1085,32 @@ Perl_valid_utf8_to_uvchr(pTHX_ const U8 *s, STRLEN *retlen)
         *retlen = expectlen;
     }
 
-    /* An invariant is trivially returned */
-    if (expectlen == 1) {
-	return uv;
+    switch (expectlen) {
+        case 1: return *s;
+        case 2: return TWO_BYTE_UTF8_TO_NATIVE(*s, *(s+1));
+        case 3: return THREE_BYTE_UTF8_TO_NATIVE(s);
+        case 4: return FOUR_BYTE_UTF8_TO_NATIVE(s);
+        case 5: return FIVE_BYTE_UTF8_TO_NATIVE(s);
+        case 6: return SIX_BYTE_UTF8_TO_NATIVE(s);
+        default:
+        {
+            const U8* send = s + expectlen;
+            UV uv = NATIVE_UTF8_TO_I8(*s);
+
+            /* Remove the leading bits that indicate the number of bytes, leaving just
+            * the bits that are part of the value */
+            uv &= UTF_START_MASK(expectlen);
+
+            /* Now, loop through the remaining bytes, accumulating each into the
+            * working total as we go. */
+            for (++s; s < send; s++) {
+                uv = UTF8_ACCUMULATE(uv, *s);
+            }
+
+            return UNI_TO_NATIVE(uv);
+        }
     }
-
-#ifdef EBCDIC
-    uv = NATIVE_UTF8_TO_I8(uv);
-#endif
-
-    /* Remove the leading bits that indicate the number of bytes, leaving just
-     * the bits that are part of the value */
-    uv &= UTF_START_MASK(expectlen);
-
-    /* Now, loop through the remaining bytes, accumulating each into the
-     * working total as we go.  (I khw tried unrolling the loop for up to 4
-     * bytes, but there was no performance improvement) */
-    for (++s; s < send; s++) {
-        uv = UTF8_ACCUMULATE(uv, *s);
-    }
-
-    return UNI_TO_NATIVE(uv);
-
+    NOT_REACHED; /* NOTREACHED */
 }
 
 /*
