@@ -1487,11 +1487,11 @@ Perl_utf16_to_utf8(pTHX_ U8* p, U8* d, I32 bytelen, I32 *newlen)
     while (p < pend) {
 	UV uv = (p[0] << 8) + p[1]; /* UTF-16BE */
 	p += 2;
-	if (OFFUNI_IS_INVARIANT(uv)) {
+	if (OFFUNI_IS_INVARIANT(uv)) {          /* 1-byte result */
 	    *d++ = LATIN1_TO_NATIVE((U8) uv);
 	    continue;
 	}
-	if (uv <= MAX_UTF8_TWO_BYTE) {
+	if (uv <= MAX_UTF8_TWO_BYTE) {          /* 2-byte result */
 	    *d++ = UTF8_TWO_BYTE_HI(UNI_TO_NATIVE(uv));
 	    *d++ = UTF8_TWO_BYTE_LO(UNI_TO_NATIVE(uv));
 	    continue;
@@ -1521,22 +1521,41 @@ Perl_utf16_to_utf8(pTHX_ U8* p, U8* d, I32 bytelen, I32 *newlen)
                                        + (low - FIRST_LOW_SURROGATE) + 0x10000;
 	    }
 	}
+
+        /* UTF-16 only can represent up through 0x10FFFF, which takes up 4
+         * bytes on ASCII machines; 5 on EBCDIC.  */
+
+            /* The 16 is for E0-EF start bytes, the 2 is for 2 continuation
+             * bytes which each contribute SHIFT bits.  This yields 0x4000 on
+             * EBCDIC platforms, 0x1_0000 on ASCII */
+        if (uv < (16 * (1U << ((3 - 1) * SHIFT)))) {  /* 3-byte result */
+            *d++ = I8_TO_NATIVE_UTF8(( uv >> ((3 - 1) * SHIFT)) | UTF_START_MARK(3));
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+            *d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
+            continue;
+        }
 #ifdef EBCDIC
-        d = uvoffuni_to_utf8_flags(d, uv, 0);
-#else
-	if (uv < 0x10000) {
-	    *d++ = (U8)(( uv >> 12)         | 0xe0);
-	    *d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	    *d++ = (U8)(( uv        & 0x3f) | 0x80);
-	    continue;
-	}
-	else {
-	    *d++ = (U8)(( uv >> 18)         | 0xf0);
-	    *d++ = (U8)(((uv >> 12) & 0x3f) | 0x80);
-	    *d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	    *d++ = (U8)(( uv        & 0x3f) | 0x80);
-	    continue;
-	}
+        /* The test is needed only for EBCDIC, as this is the final alternative
+         * on ASCII platforms */
+            /* The 8 is for F0-F7 start bytes, the 3 is for 3 continuation
+             * bytes which each contribute SHIFT bits.  This yields 0x4_0000 on
+             * EBCDIC platforms, 0x20_0000 on ASCII */
+        if (uv < (8 * (1U << ((4 - 1) * SHIFT))))    /* 4-byte result */
+#endif
+        {
+            *d++ = I8_TO_NATIVE_UTF8(( uv >> ((4 - 1) * SHIFT)) | UTF_START_MARK(4));
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+            *d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
+            continue;
+        }
+
+#ifdef EBCDIC   /* 5-byte result */
+        *d++ = I8_TO_NATIVE_UTF8(( uv >> ((5 - 1) * SHIFT)) | UTF_START_MARK(5));
+        *d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) |   MARK);
+        *d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+        *d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 #endif
     }
     *newlen = d - dstart;
