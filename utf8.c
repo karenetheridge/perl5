@@ -160,8 +160,14 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 	}
     }
 
-#if defined(EBCDIC)
-    {
+/*  Use shorter names internally in this file */
+#define SHIFT   UTF_ACCUMULATION_SHIFT
+#undef  MARK
+#define MARK    UTF_CONTINUATION_MARK
+#define MASK    UTF_CONTINUATION_MASK
+
+    /* Below is an unrolled version of
+     *
 	STRLEN len  = OFFUNISKIP(uv);
 	U8 *p = d+len-1;
 	while (p > d) {
@@ -170,75 +176,164 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 	}
 	*p = I8_TO_NATIVE_UTF8((uv & UTF_START_MASK(len)) | UTF_START_MARK(len));
 	return d+len;
-    }
-#else /* Non loop style */
-    if (uv < 0x800) {
-	*d++ = (U8)(( uv >>  6)         | 0xc0);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+     *
+     * Unrolled, it looks like:
+     *
+        if (uv < max_2_byte_uv) return the 2 bytes;
+        if (uv < max_3_byte_uv) return the 3 bytes;
+        ...
+     *
+     * If OFFUNISKIP were very fast on this platform, the below could more
+     * simply be written as
+     *
+	STRLEN len  = OFFUNISKIP(uv);
+        if (len > 6) {
+            deal with vagaries of word size and platform and reserved bytes
+            goto six:
+        }
+        else {
+            *d++ = I8_TO_NATIVE_UTF8(( uv >> ((len - 1) * SHIFT))
+                                                        | UTF_START_MARK(len));
+        }
+        switch (len) {
+          case 6:
+             six:
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((5 - 1) * SHIFT)) & MASK) | MARK);
+          case 5:
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) | MARK);
+          case 4:
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) | MARK);
+          case 3:
+            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) | MARK);
+          case 2:
+            *d++ = I8_TO_NATIVE_UTF8(( uv                       & MASK) | MARK);
+        }
+        return d;
+    *
+    * Note that on EBCDIC we have to turn things into NATIVE_UTF8, which is a
+    * no-op on ASCII platforms */
+
+    /* 2-byte result.   In the test immediately below, the 32 is for start
+     * bytes C0-CF, D0-DF, each of which has a continuation byte which
+     * contributes SHIFT bits.  This yields 0x400 on EBCDIC platforms, 0x800 on
+     * ASCII */
+    if (uv < (32 * (1U << SHIFT))) {
+	*d++ = I8_TO_NATIVE_UTF8(( uv >> SHIFT) | UTF_START_MARK(2));
+	*d++ = I8_TO_NATIVE_UTF8(( uv           & MASK) |   MARK);
 	return d;
     }
-    if (uv < 0x10000) {
-	*d++ = (U8)(( uv >> 12)         | 0xe0);
-	*d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+
+    /* 3-byte result.   In the test immediately below, the 16 is for start bytes
+     * E0-EF, the 2 is for 2 continuation bytes which each contribute SHIFT
+     * bits.  This yields 0x4000 on EBCDIC platforms, 0x1_0000 on ASCII, so 3
+     * bytes covers the range 0x400-0x3FFF on EBCDIC; 0x800-0xFFFF on ASCII */
+    if (uv < (16 * (1U << (2 * SHIFT)))) {
+	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((3 - 1) * SHIFT)) | UTF_START_MARK(3));
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 	return d;
     }
-    if (uv < 0x200000) {
-	*d++ = (U8)(( uv >> 18)         | 0xf0);
-	*d++ = (U8)(((uv >> 12) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+
+    /* 4-byte result.   In the test immediately below, the 8 is for start bytes
+     * F0-F7, the 3 is for 3 continuation bytes which each contribute SHIFT
+     * bits.  This yields 0x4_0000 on EBCDIC platforms, 0x20_0000 on ASCII, so
+     * 4 bytes covers the range 0x4000-0x3_FFFF on EBCDIC; 0x1_0000-0x1F_FFFF
+     * on ASCII */
+    if (uv < (8 * (1U << (3 * SHIFT)))) {
+	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((4 - 1) * SHIFT)) | UTF_START_MARK(4));
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 	return d;
     }
-    if (uv < 0x4000000) {
-	*d++ = (U8)(( uv >> 24)         | 0xf8);
-	*d++ = (U8)(((uv >> 18) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 12) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+
+    /* 5-byte result.   In the test immediately below, the first 4 is for start
+     * bytes F8-FB, the second 4 is for 4 continuation bytes which each
+     * contribute SHIFT bits.  This yields 0x40_0000 on EBCDIC platforms,
+     * 0x400_0000 on ASCII, so 5 bytes covers the range 0x4_0000-0x3F_FFFF on
+     * EBCDIC; 0x20_0000-0x3FF_FFFF on ASCII */
+    if (uv < (4 * (1U << (4 * SHIFT)))) {
+	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((5 - 1) * SHIFT)) | UTF_START_MARK(5));
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 	return d;
     }
-    if (uv < 0x80000000) {
-	*d++ = (U8)(( uv >> 30)         | 0xfc);
-	*d++ = (U8)(((uv >> 24) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 18) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 12) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+
+    /* 6-byte result.   In the test immediately below, the 2 is for start bytes
+     * FC-FD, the 5 is for 5 continuation bytes which each contribute SHIFT
+     * bits.  This yields 0x400_0000 on EBCDIC platforms, 0x8000_0000 on ASCII,
+     * so 6 bytes covers the range 0x40_0000-0x3FF_FFFF on EBCDIC;
+     * 0x400_0000-0x7FFF_FFFF on ASCII.
+     * */
+    if (uv < (2 * (1U << (5 * SHIFT)))) {
+	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((6 - 1) * SHIFT)) | UTF_START_MARK(6));
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((5 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 	return d;
     }
-#ifdef UTF8_QUAD_MAX
-    if (uv < UTF8_QUAD_MAX)
+
+#if defined(UV_IS_QUAD) || defined(EBCDIC)
+    /* 7-byte result.  The FE start byte can have 6 continuation bytes which
+     * each contribute SHIFT bits.  This yields 0x4000_0000 on EBCDIC
+     * platforms, 0x10_0000_0000 on ASCII, so 7 bytes covers the range
+     * 0x400_0000-0x3FFF_FFFF on EBCDIC; 0x400_0000-0xF_FFFF_FFFF on ASCII */
+    if (uv < ((UV) 1U << (6 * SHIFT)))
 #endif
     {
-	*d++ =                            0xfe;	/* Can't match U+FEFF! */
-	*d++ = (U8)(((uv >> 30) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 24) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 18) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 12) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+	*d++ = I8_TO_NATIVE_UTF8(0xfe); /* Can't match U+FEFF! */
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((6 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((5 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 	return d;
     }
-#ifdef UTF8_QUAD_MAX
+
+    /* Below is for a 0xFF start byte.  You need a 64-bit word size to be able
+     * to express this on an ASCII machine, but a 32-bit word expresses the
+     * lower range on EBCDIC platforms */
+#if defined(UV_IS_QUAD) || defined(EBCDIC)
     {
-	*d++ =                            0xff;		/* Can't match U+FFFE! */
-	*d++ =                            0x80;		/* 6 Reserved bits */
-	*d++ = (U8)(((uv >> 60) & 0x0f) | 0x80);	/* 2 Reserved bits */
-	*d++ = (U8)(((uv >> 54) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 48) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 42) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 36) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 30) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 24) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 18) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >> 12) & 0x3f) | 0x80);
-	*d++ = (U8)(((uv >>  6) & 0x3f) | 0x80);
-	*d++ = (U8)(( uv        & 0x3f) | 0x80);
+        /* UTF8_MAX_BYTES result.  The 0xff start byte is followed by 13
+         * continuation bytes on EBCDIC; 12 on ASCII.  These numbers of bytes
+         * are essentially arbitrary, but were chosen to be enough to represent
+         * 2**64 - 1 (plus an extra byte on ASCII).  */
+        *d++ = I8_TO_NATIVE_UTF8(0xff);		/* Can't match U+FFFE! */
+#   ifdef UV_IS_QUAD
+#      ifndef EBCDIC
+	*d++ =    /*      ASCII platform (12 - 1) 6 Reserved bits */    MARK;
+#      else
+	*d++ = I8_TO_NATIVE_UTF8(((uv >>((13 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >>((12 - 1) * SHIFT)) & MASK) |   MARK);
+#      endif
+	*d++ = I8_TO_NATIVE_UTF8(((uv >>((11 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >>((10 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((9 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((8 - 1) * SHIFT)) & MASK) |   MARK);
+#   else    /* Here, must be EBCDIC without quad */
+	*d++ = I8_TO_NATIVE_UTF8(    /*  (13 - 1) 5 Reserved bits */    MARK);
+	*d++ = I8_TO_NATIVE_UTF8(    /*  (12 - 1) 5 Reserved bits */    MARK);
+	*d++ = I8_TO_NATIVE_UTF8(    /*  (11 - 1) 5 Reserved bits */    MARK);
+	*d++ = I8_TO_NATIVE_UTF8(    /*  (10 - 1) 5 Reserved bits */    MARK);
+	*d++ = I8_TO_NATIVE_UTF8(    /*  ( 9 - 1) 5 Reserved bits */    MARK);
+	*d++ = I8_TO_NATIVE_UTF8(    /*  ( 8 - 1) 5 Reserved bits */    MARK);
+#   endif
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((7 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((6 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((5 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
+	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
 	return d;
     }
 #endif
-#endif /* Non loop style */
 }
 /*
 =for apidoc uvchr_to_utf8
