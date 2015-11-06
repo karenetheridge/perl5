@@ -11,9 +11,10 @@ BEGIN {
     if (ord("A") == 193) {
         # This file is encoded partially in CN, won't get translated properly
         # to EBCDIC
-    print "1..0 # Skip: EBCDIC\n";
-    exit 0;
+    #print "1..0 # Skip: EBCDIC\n";
+    #exit 0;
     }
+    require 'charset_tools.pl';
     $| = 1;
 }
 
@@ -48,7 +49,7 @@ run_tests('Simplified Chinese only', {
 39318.20986.24246.29289.65292.19975.22269.21688.23425.12290
     ),
 
-    'euc-cn'	=> join('',
+    'euc-cn'	=> native_to_uni(join('',
 '《易经》第一卦',
 '彖曰：',
 '大哉乾元，万物资始，',
@@ -59,9 +60,9 @@ run_tests('Simplified Chinese only', {
 '乾道变化，各正性命，',
 '保合大和，乃利贞。',
 '首出庶物，万国咸宁。',
-    ),
+    )),
 
-    'gb2312-raw'	=> join('',
+    'gb2312-raw'	=> native_to_uni(join('',
 '!6RW>-!75ZR;XT',
 'ehT;#:',
 '4sTUG,T*#,MrNoWJJ<#,',
@@ -72,9 +73,9 @@ run_tests('Simplified Chinese only', {
 'G,5@1d;/#,8wU}PTC|#,',
 '1#:O4s:M#,DK@{Uj!#',
 'JW3vJ|No#,Mr9zOLD~!#'
-    ), 
+    )), 
 
-    'iso-ir-165'=> join('',
+    'iso-ir-165'=> native_to_uni(join('',
 '!6RW>-!75ZR;XT',
 'ehT;#:',
 '4sTUG,T*#,MrNoWJJ<#,',
@@ -85,7 +86,7 @@ run_tests('Simplified Chinese only', {
 'G,5@1d;/#,8wU}PTC|#,',
 '1#:O4s:M#,DK@{Uj!#',
 'JW3vJ|No#,Mr9zOLD~!#'
-    ), 
+    )), 
 });
 
 run_tests('Simplified Chinese + ASCII', {
@@ -101,27 +102,27 @@ run_tests('Simplified Chinese + ASCII', {
 29992.20061.65292.22825.24503.19981.21487.20026.39318.20063.12290
     ),
 
-    'cp936'	=> join(chr(10),
+    'cp936'	=> native_to_uni(join(chr(10),
 '象曰：',
 '天行健，君子以自强不息。',
 '潜龙勿用，阳在下也。 见龙在田，德施普也。 终日乾乾，反复道也。',
 '或跃在渊，进无咎也。飞龙在天，大人造也。 亢龙有悔，盈不可久也。',
 '用九，天德不可为首也。',
-    ),
+    )),
 
-    'hz'	=> join(chr(10),
+    'hz'	=> native_to_uni(join(chr(10),
 '~{OsT;#:~}',
 '~{LlPP=!#,>}WSRTWTG?2;O"!#~}',
 '~{G1AzNpSC#,QtTZOBR2!#~} ~{<{AzTZLo#,5BJ)FUR2!#~} ~{VUHUG,G,#,74845@R2!#~}',
 '~{;rT>TZT(#,=xN^>LR2!#7IAzTZLl#,4sHKTlR2!#~} ~{?:AzSP;Z#,S/2;?I>CR2!#~}',
 '~{SC>E#,Ll5B2;?IN*JWR2!#~}',
-    ),
+    )),
 });
 
 run_tests('Traditional Chinese', {
     'utf',	=> 20094.65306.20803.12289.20136.12289.21033.12289.35998,
-    'gb12345-raw'	=> 'G,#:T*!":`!"@{!"Uj',
-    'gbk'	=> '乾：元、亨、利、貞',
+    'gb12345-raw'	=> native_to_uni('G,#:T*!":`!"@{!"Uj'),
+    'gbk'	=> native_to_uni('乾：元、亨、利、貞'),
 });
 
 sub run_tests {
