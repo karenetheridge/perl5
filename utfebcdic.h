@@ -184,6 +184,7 @@ information, so that with 13 continuation bytes, we can handle 65 bits, just
 above what a 64 bit word can hold */
 
 
+/* This is a fundamental property of UTF-EBCDIC */
 #define OFFUNI_IS_INVARIANT(c) (((UV)(c)) <  0xA0)
 
 /* It turns out that on EBCDIC platforms, the invariants are the characters
