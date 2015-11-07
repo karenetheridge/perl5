@@ -670,14 +670,23 @@ case any call to string overloading updates the internal UTF-8 encoding flag.
 
 #define UNICODE_IS_REPLACEMENT(uv)	((UV) (uv) == UNICODE_REPLACEMENT)
 #define UNICODE_IS_BYTE_ORDER_MARK(uv)	((UV) (uv) == UNICODE_BYTE_ORDER_MARK)
-#define UNICODE_IS_NONCHAR(uv)         (((UV) (uv) >= 0xFDD0 && (UV) (uv) <= 0xFDEF) \
-			/* The other noncharacters end in FFFE or FFFF, which  \
-			 * the mask below catches both of, but beyond the last \
-			 * official unicode code point, they aren't            \
-			 * noncharacters, since those aren't Unicode           \
-			 * characters at all */                                \
-            || (((((UV) (uv) & 0xFFFE) == 0xFFFE)) && ! UNICODE_IS_SUPER(uv)))
-#define UNICODE_IS_SUPER(uv)           ((UV) (uv) > PERL_UNICODE_MAX)
+
+/* Is 'uv' one of the 32 contiguous-range noncharacters? */
+#define UNICODE_IS_32_NONCHARS(uv)      ((UV) (uv) >= 0xFDD0                    \
+                                      && (UV) (uv) <= 0xFDEF)
+
+/* Is 'uv' one of the 32 noncharacters U+0FFFE, U+0FFFF, U+1FFFE, U+1FFFF,
+ * U+2FFFE, U+2FFFF, ..., U+FFFFE, U+FFFFF ? */
+#define UNICODE_IS_xFFF_E_F(uv)  (((UV) (uv) & (~0xFFFFF | 0xFFFE)) == 0xFFFE)
+
+/* Is 'uv' one of the 2 noncharacters U+10FFFE, U+10FFFF ? */
+#define UNICODE_IS_10_FFF_E_F(uv)                                               \
+                            (((UV) (uv) & (~0xF | 0xE)) == 0x10FFFE)
+
+#define UNICODE_IS_NONCHAR(uv) (   UNICODE_IS_32_NONCHARS(uv)                   \
+                                || UNICODE_IS_xFFF_E_F(uv)                      \
+                                || UNICODE_IS_10_FFF_E_F(uv))
+#define UNICODE_IS_SUPER(uv)    ((UV) (uv) > PERL_UNICODE_MAX)
 #define UNICODE_IS_ABOVE_31_BIT(uv)    ((UV) (uv) > 0x7FFFFFFF)
 
 #define LATIN_SMALL_LETTER_SHARP_S      LATIN_SMALL_LETTER_SHARP_S_NATIVE
