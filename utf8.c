@@ -108,56 +108,10 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 {
     PERL_ARGS_ASSERT_UVOFFUNI_TO_UTF8_FLAGS;
 
+    /* Test for and handle 1-byte result. */
     if (OFFUNI_IS_INVARIANT(uv)) {
 	*d++ = LATIN1_TO_NATIVE(uv);
 	return d;
-    }
-
-    /* The first problematic code point is the first surrogate */
-    if (uv >= UNICODE_SURROGATE_FIRST) {
-	if (UNICODE_IS_SURROGATE(uv)) {
-	    if (flags & UNICODE_WARN_SURROGATE) {
-		Perl_ck_warner_d(aTHX_ packWARN(WARN_SURROGATE),
-					    "UTF-16 surrogate U+%04"UVXf, uv);
-	    }
-	    if (flags & UNICODE_DISALLOW_SURROGATE) {
-		return NULL;
-	    }
-	}
-	else if (UNICODE_IS_SUPER(uv)) {
-            if (   UNLIKELY(uv > MAX_NON_DEPRECATED_CP)
-                && ckWARN_d(WARN_DEPRECATED))
-            {
-		Perl_warner(aTHX_ packWARN(WARN_DEPRECATED),
-                            cp_above_legal_max, uv, MAX_NON_DEPRECATED_CP);
-            }
-	    if (   (flags & UNICODE_WARN_SUPER)
-		|| (UNICODE_IS_ABOVE_31_BIT(uv) && (flags & UNICODE_WARN_ABOVE_31_BIT)))
-            {
-                Perl_ck_warner_d(aTHX_ packWARN(WARN_NON_UNICODE),
-
-                  /* Choose the more dire applicable warning */
-                  (UNICODE_IS_ABOVE_31_BIT(uv))
-                  ? "Code point 0x%"UVXf" is not Unicode, and not portable"
-                  : "Code point 0x%"UVXf" is not Unicode, may not be portable",
-                 uv);
-	    }
-	    if (flags & UNICODE_DISALLOW_SUPER
-		|| (UNICODE_IS_ABOVE_31_BIT(uv) && (flags & UNICODE_DISALLOW_ABOVE_31_BIT)))
-	    {
-		return NULL;
-	    }
-	}
-	else if (UNICODE_IS_NONCHAR(uv)) {
-	    if (flags & UNICODE_WARN_NONCHAR) {
-		Perl_ck_warner_d(aTHX_ packWARN(WARN_NONCHAR),
-		 "Unicode non-character U+%04"UVXf" is not recommended for open interchange",
-		 uv);
-	    }
-	    if (flags & UNICODE_DISALLOW_NONCHAR) {
-		return NULL;
-	    }
-	}
     }
 
 /*  Use shorter names internally in this file */
@@ -182,91 +136,112 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
         if (uv < max_2_byte_uv) return the 2 bytes;
         if (uv < max_3_byte_uv) return the 3 bytes;
         ...
-     *
-     * If OFFUNISKIP were very fast on this platform, the below could more
-     * simply be written as
-     *
-	STRLEN len  = OFFUNISKIP(uv);
-        if (len > 6) {
-            deal with vagaries of word size and platform and reserved bytes
-            goto six:
-        }
-        else {
-            *d++ = I8_TO_NATIVE_UTF8(( uv >> ((len - 1) * SHIFT))
-                                                        | UTF_START_MARK(len));
-        }
-        switch (len) {
-          case 6:
-             six:
-            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((5 - 1) * SHIFT)) & MASK) | MARK);
-          case 5:
-            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) | MARK);
-          case 4:
-            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) | MARK);
-          case 3:
-            *d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) | MARK);
-          case 2:
-            *d++ = I8_TO_NATIVE_UTF8(( uv                       & MASK) | MARK);
-        }
-        return d;
     *
     * Note that on EBCDIC we have to turn things into NATIVE_UTF8, which is a
     * no-op on ASCII platforms */
 
-    /* 2-byte result.   In the test immediately below, the 32 is for start
-     * bytes C0-CF, D0-DF, each of which has a continuation byte which
-     * contributes SHIFT bits.  This yields 0x400 on EBCDIC platforms, 0x800 on
-     * ASCII */
+    /* Not 1-byte; test for and handle 2-byte result.   In the test immediately
+     * below, the 32 is for start bytes C0-CF, D0-DF, each of which has a
+     * continuation byte which contributes SHIFT bits.  This yields 0x400 on
+     * EBCDIC platforms, 0x800 on ASCII */
     if (uv < (32 * (1U << SHIFT))) {
 	*d++ = I8_TO_NATIVE_UTF8(( uv >> SHIFT) | UTF_START_MARK(2));
 	*d++ = I8_TO_NATIVE_UTF8(( uv           & MASK) |   MARK);
 	return d;
     }
 
-    /* 3-byte result.   In the test immediately below, the 16 is for start bytes
-     * E0-EF, the 2 is for 2 continuation bytes which each contribute SHIFT
-     * bits.  This yields 0x4000 on EBCDIC platforms, 0x1_0000 on ASCII, so 3
-     * bytes covers the range 0x400-0x3FFF on EBCDIC; 0x800-0xFFFF on ASCII */
+    /* Not 2-byte; test for and handle 3-byte result.   In the test immediately
+     * below, the 16 is for start bytes E0-EF, the 2 is for 2 continuation
+     * bytes which each contribute SHIFT bits.  This yields 0x4000 on EBCDIC
+     * platforms, 0x1_0000 on ASCII, so 3 bytes covers the range 0x400-0x3FFF
+     * on EBCDIC; 0x800-0xFFFF on ASCII */
     if (uv < (16 * (1U << (2 * SHIFT)))) {
 	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((3 - 1) * SHIFT)) | UTF_START_MARK(3));
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
+
+#ifndef EBCDIC  /* These problematic code points are 4 bytes on EBCDIC */
+        /* The most likely code points in this range are below the surrogates.
+         * Do an extra test to quickly exclude those. */
+        if (UNLIKELY(uv >= UNICODE_SURROGATE_FIRST)) {
+            if (UNLIKELY(   UNICODE_IS_32_NONCHARS(uv)
+                         || UNICODE_IS_xFFF_E_F(uv)))
+            {
+                goto handle_nonchar;
+            }
+            if (UNLIKELY(UNICODE_IS_SURROGATE(uv))) {
+                goto handle_surrogate;
+            }
+        }
+#endif
 	return d;
     }
 
-    /* 4-byte result.   In the test immediately below, the 8 is for start bytes
-     * F0-F7, the 3 is for 3 continuation bytes which each contribute SHIFT
-     * bits.  This yields 0x4_0000 on EBCDIC platforms, 0x20_0000 on ASCII, so
-     * 4 bytes covers the range 0x4000-0x3_FFFF on EBCDIC; 0x1_0000-0x1F_FFFF
-     * on ASCII */
+    /* Not 3-byte; test for and handle 4-byte result.   In the test immediately
+     * below, the 8 is for start bytes F0-F7, the 3 is for 3 continuation bytes
+     * which each contribute SHIFT bits.  This yields 0x4_0000 on EBCDIC
+     * platforms, 0x20_0000 on ASCII, so 4 bytes covers the range
+     * 0x4000-0x3_FFFF on EBCDIC; 0x1_0000-0x1F_FFFF on ASCII */
     if (uv < (8 * (1U << (3 * SHIFT)))) {
 	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((4 - 1) * SHIFT)) | UTF_START_MARK(4));
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
+
+#ifdef EBCDIC  /* These problematic code points are 3 bytes on ASCII */
+	if (UNLIKELY(   UNICODE_IS_32_NONCHARS(uv)
+                     || UNICODE_IS_xFFF_E_F(uv)))
+        {
+            goto handle_nonchar;
+        }
+	if (UNLIKELY(UNICODE_IS_SURROGATE(uv))) {
+            goto handle_surrogate;
+        }
+#else
+	if (UNLIKELY(   UNICODE_IS_xFFF_E_F(uv))
+                     || UNICODE_IS_10_FFF_E_F(uv))
+        {
+            goto handle_nonchar;
+        }
+        if (UNLIKELY(UNICODE_IS_SUPER(uv))) {
+            goto handle_super;
+        }
+#endif
 	return d;
     }
 
-    /* 5-byte result.   In the test immediately below, the first 4 is for start
-     * bytes F8-FB, the second 4 is for 4 continuation bytes which each
-     * contribute SHIFT bits.  This yields 0x40_0000 on EBCDIC platforms,
-     * 0x400_0000 on ASCII, so 5 bytes covers the range 0x4_0000-0x3F_FFFF on
-     * EBCDIC; 0x20_0000-0x3FF_FFFF on ASCII */
+    /* Not 4-byte; test for and handle 5-byte result.   In the test immediately
+     * below, the first 4 is for start bytes F8-FB, the second 4 is for 4
+     * continuation bytes which each contribute SHIFT bits.  This yields
+     * 0x40_0000 on EBCDIC platforms, 0x400_0000 on ASCII, so 5 bytes covers
+     * the range 0x4_0000-0x3F_FFFF on EBCDIC; 0x20_0000-0x3FF_FFFF on ASCII */
     if (uv < (4 * (1U << (4 * SHIFT)))) {
 	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((5 - 1) * SHIFT)) | UTF_START_MARK(5));
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((4 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
-	return d;
+
+#ifdef EBCDIC
+	if (UNLIKELY(   UNICODE_IS_xFFF_E_F(uv))
+                     || UNICODE_IS_10_FFF_E_F(uv))
+        {
+            goto handle_nonchar;
+        }
+        if (UNLIKELY(UNICODE_IS_SUPER(uv))) {
+            goto handle_super;
+        }
+        return d;
+#else
+	goto handle_super;
+#endif
     }
 
-    /* 6-byte result.   In the test immediately below, the 2 is for start bytes
-     * FC-FD, the 5 is for 5 continuation bytes which each contribute SHIFT
-     * bits.  This yields 0x400_0000 on EBCDIC platforms, 0x8000_0000 on ASCII,
-     * so 6 bytes covers the range 0x40_0000-0x3FF_FFFF on EBCDIC;
-     * 0x400_0000-0x7FFF_FFFF on ASCII.
-     * */
+    /* Not 5-byte; test for and handle 6-byte result.   In the test immediately
+     * below, the 2 is for start bytes FC-FD, the 5 is for 5 continuation bytes
+     * which each contribute SHIFT bits.  This yields 0x400_0000 on EBCDIC
+     * platforms, 0x8000_0000 on ASCII, so 6 bytes covers the range
+     * 0x40_0000-0x3FF_FFFF on EBCDIC; 0x400_0000-0x7FFF_FFFF on ASCII. */
     if (uv < (2 * (1U << (5 * SHIFT)))) {
 	*d++ = I8_TO_NATIVE_UTF8(( uv >> ((6 - 1) * SHIFT)) | UTF_START_MARK(6));
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((5 - 1) * SHIFT)) & MASK) |   MARK);
@@ -274,14 +249,22 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
-	return d;
+	goto handle_super;
     }
 
+    /* This could be moved down for EBCDIC, but not worth the complexity */
+    if (   UNLIKELY(uv > MAX_NON_DEPRECATED_CP) && ckWARN_d(WARN_DEPRECATED)) {
+        Perl_warner(aTHX_ packWARN(WARN_DEPRECATED),
+                    cp_above_legal_max, uv, MAX_NON_DEPRECATED_CP);
+    }
+
+    /* Not 6-byte; handle 7-byte result.  There is no need for a test on
+     * platforms where 7 bytes is the maximum possible, .  The FE start byte
+     * can have 6 continuation bytes which each contribute SHIFT bits.  This
+     * yields 0x4000_0000 on EBCDIC platforms, 0x10_0000_0000 on ASCII, so 7
+     * bytes covers the range 0x400_0000-0x3FFF_FFFF on EBCDIC;
+     * 0x400_0000-0xF_FFFF_FFFF on ASCII */
 #if defined(UV_IS_QUAD) || defined(EBCDIC)
-    /* 7-byte result.  The FE start byte can have 6 continuation bytes which
-     * each contribute SHIFT bits.  This yields 0x4000_0000 on EBCDIC
-     * platforms, 0x10_0000_0000 on ASCII, so 7 bytes covers the range
-     * 0x400_0000-0x3FFF_FFFF on EBCDIC; 0x400_0000-0xF_FFFF_FFFF on ASCII */
     if (uv < ((UV) 1U << (6 * SHIFT)))
 #endif
     {
@@ -292,7 +275,11 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
-	return d;
+#ifdef EBCDIC
+        goto handle_super;
+#else
+	goto handle_above_31_bit;
+#endif
     }
 
     /* Below is for a 0xFF start byte.  You need a 64-bit word size to be able
@@ -331,9 +318,55 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((3 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
-	return d;
     }
+    /* FALLTHROUGH */                                                           \
 #endif
+
+  handle_above_31_bit:
+
+    if (flags & (UNICODE_WARN_ABOVE_31_BIT|UNICODE_WARN_SUPER)) {
+        Perl_ck_warner_d(aTHX_ packWARN(WARN_NON_UNICODE),
+                  "Code point 0x%"UVXf" is not Unicode, and not portable", uv);
+        /* So won't warn twice; we have to fall through into handle_super in
+         * case supers are disallowed */
+        flags &= ~UNICODE_WARN_SUPER;
+    }
+
+    if (flags & UNICODE_DISALLOW_ABOVE_31_BIT) {
+        return NULL;
+    }
+
+  handle_super:
+    if (flags & UNICODE_WARN_SUPER) {
+        Perl_ck_warner_d(aTHX_ packWARN(WARN_NON_UNICODE),
+            "Code point 0x%04"UVXf" is not Unicode, may not be portable", uv);
+    }
+
+    if (flags & UNICODE_DISALLOW_SUPER) {
+        return NULL;
+    }
+    return d;
+
+  handle_surrogate:
+    if (flags & UNICODE_WARN_SURROGATE) {
+        Perl_ck_warner_d(aTHX_ packWARN(WARN_SURROGATE),
+                                    "UTF-16 surrogate U+%04"UVXf, uv);
+    }
+    if (flags & UNICODE_DISALLOW_SURROGATE) {
+        return NULL;
+    }
+    return d;
+
+  handle_nonchar:
+    if (flags & UNICODE_WARN_NONCHAR) {
+        Perl_ck_warner_d(aTHX_ packWARN(WARN_NONCHAR),
+         "Unicode non-character U+%04"UVXf" is not recommended for open interchange",
+         uv);
+    }
+    if (flags & UNICODE_DISALLOW_NONCHAR) {
+        return NULL;
+    }
+    return d;
 }
 /*
 =for apidoc uvchr_to_utf8
