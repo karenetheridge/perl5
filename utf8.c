@@ -691,10 +691,10 @@ warn.
 UV
 Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 {
-    const U8 * const s0 = s;
+    U8 * s0;
     U8 overflow_byte = '\0';	/* Save byte in case of overflow */
     U8 * send;
-    UV uv = *s;
+    UV uv;
     STRLEN expectlen;
     SV* sv = NULL;
     UV outlier_ret = 0;	/* return value when input is in error or problematic
@@ -703,6 +703,49 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
     bool unexpected_non_continuation = FALSE;
     bool overflowed = FALSE;
     bool do_overlong_test = TRUE;   /* May have to skip this test */
+
+    const U8 munged_expectlen[] = {
+#ifndef EBCDIC
+        /* 0x00 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x10 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x20 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x30 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x40 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x50 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x60 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x70 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* ascii */
+        /* 0x80 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* bogus: continuation */
+        /* 0x90 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* bogus: continuation */
+        /* 0xA0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* bogus: continuation */
+        /* 0xB0 */ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* bogus: continuation */
+        /* 0xC0 */ 0,0,				    /* overlong */
+        /* 0xC2 */     2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* U+0080 to U+03FF */
+        /* 0xD0 */ 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* U+0400 to U+07FF */
+        /* 0xE0 */ 3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3, /* U+0800 to U+FFFF */
+        /* 0xF0 */ 4,4,4,4,4,4,4,4,5,5,5,5,0,0,	    /* above BMP to 2**31 - 1 */
+        /* 0xFE */                             0,
+        /* 0xFF */                               0
+#else
+               /*_0_1_2_3_4_5_6_7_8_9_A_B_C_D_E_F*/
+        /* 0_ */  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1  /* 0_ */,
+        /* 1_ */  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1  /* 1_ */,
+        /* 2_ */  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1  /* 2_ */,
+        /* 3_ */  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1  /* 3_ */,
+        /* 4_ */  1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1  /* 4_ */,
+        /* 5_ */  1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1  /* 5_ */,
+        /* 6_ */  1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1  /* 6_ */,
+        /* 7_ */  0,0,0,0,2,2,2,2,2,1,1,1,1,1,1,1  /* 7_ */,
+        /* 8_ */  2,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2  /* 8_ */,
+        /* 9_ */  2,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2  /* 9_ */,
+        /* A_ */  2,1,1,1,1,1,1,1,1,1,2,2,2,1,2,2  /* A_ */,
+        /* B_ */  2,2,2,2,2,2,2,3,3,3,3,3,3,1,3,3  /* B_ */,
+        /* C_ */  1,1,1,1,1,1,1,1,1,1,3,3,3,3,3,3  /* C_ */,
+        /* D_ */  1,1,1,1,1,1,1,1,1,1,3,3,4,4,4,4  /* D_ */,
+        /* E_ */  1,4,1,1,1,1,1,1,1,1,4,4,4,5,5,5  /* E_ */,
+        /* F_ */  1,1,1,1,1,1,1,1,1,1,5,0,0,0,0,1  /* F_ */
+               /*_0_1_2_3_4_5_6_7_8_9_A_B_C_D_E_F*/
+#endif
+};
 
     const char* const malformed_text = "Malformed UTF-8 character";
 
@@ -743,7 +786,7 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 	goto malformed;
     }
 
-    expectlen = UTF8SKIP(s);
+    expectlen = munged_expectlen[*s];
 
     /* A well-formed UTF-8 character, as the vast majority of calls to this
      * function will be for, has this expected length.  For efficiency, set
@@ -753,13 +796,188 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 	*retlen = expectlen;
     }
 
-    /* An invariant is trivially well-formed */
-    if (UTF8_IS_INVARIANT(uv)) {
-	return uv;
+    /* If it looks good, we try an unrolled switch() for the shortest sequence
+     * lengths */
+    if (curlen >= expectlen) switch (expectlen) {
+
+        case 0: break;  /* These are either errors, or too big for this
+                           switch() */
+
+        case 1: return *s;
+
+        case 2:
+            if (UNLIKELY(! UTF8_IS_CONTINUATION(*(s+1)))) {
+                break;
+            }
+
+            /* There is no need to test for overlongs for 2-byte strings, as
+             * all such have had their expectlen's set to 0. */
+            return TWO_BYTE_UTF8_TO_NATIVE(s[0], s[1]);
+
+        case 3:
+
+            /* Make sure the two continuation bytes are really continuations.
+             * We can do this in one branch by combining those bytes into
+             * a conglomerate word, and testing all at once.  First, note that
+             * on ASCII platforms a continuation byte must have the form
+             *      b & 0xC0 == 0x80
+             * The alleged continuation bytes are combined by shifting the
+             * non-final one 8 bits (one byte position); similarly we create a
+             * composite mask.  On ASCII machines, the below is equivalent to:
+             * if ((v & 0xC0C0) != 0x8080) where 'v' is the combined
+             * continuation bytes.  On EBCDIC machines we have to convert to I8
+             * first, and then it's like
+             *      v & 0xE0E0 != 0xA0A0
+             */
+            if (UNLIKELY((((  (NATIVE_UTF8_TO_I8(s[1]) << 8)
+                            |  NATIVE_UTF8_TO_I8(s[2]))
+                                             & (  UTF_IS_CONTINUATION_MASK << 8
+                                                | UTF_IS_CONTINUATION_MASK))
+                   != ((UTF_CONTINUATION_MARK << 8) | UTF_CONTINUATION_MARK))))
+            {
+                break;
+            }
+
+            uv = THREE_BYTE_UTF8_TO_NATIVE(s);
+
+            /* Check for overlongs by seeing if the value could have fit in a
+             * 2-byte sequence.  The expression below evalutes to the smallest
+             * number that a 3-byte sequence handles.  See comments at the
+             * definition for __COMMON_UNI_SKIP for its derivation */
+            if (UNLIKELY(uv < 32 * (1U << UTF_ACCUMULATION_SHIFT))) {
+                break;
+            }
+
+#ifndef EBCDIC /* For ASCII platforms 3-byte UTF-8 sequences cover the range
+                  0x800 - 0xFFFF, which includes some of the non-characters and
+                  all the surrogates.  The code points above the surrogates are
+                  not commonly used.  So we add an extra test for being at
+                  least a surrogate to quickly exclude the common case.  On
+                  EBCDIC platforms 3-bytes gets you 0x400 - 0x3FFF, which
+                  doesn't have any of these problematic code points. */
+            if (UNLIKELY(uv >= UNICODE_SURROGATE_FIRST)) {
+                if (UNLIKELY(   UNICODE_IS_32_NONCHARS(uv)
+                             || UNICODE_IS_xFFF_E_F(uv)))
+                {
+                    goto is_nonchar;
+                }
+                if (UNLIKELY(UNICODE_IS_SURROGATE(uv))) {
+                    goto is_surrogate;
+                }
+            }
+#endif
+            return uv;
+
+        case 4:
+            /* This is equivalent to: if ((v & 0xC0C0C0) != 0x808080) on ASCII
+             * platforms */
+            if (UNLIKELY((((  (NATIVE_UTF8_TO_I8(s[1]) << 16)
+                            | (NATIVE_UTF8_TO_I8(s[2]) << 8)
+                            |  NATIVE_UTF8_TO_I8(s[3]))
+                                        & (  (UTF_IS_CONTINUATION_MASK << 16)
+                                           | (UTF_IS_CONTINUATION_MASK << 8)
+                                           |  UTF_IS_CONTINUATION_MASK))
+                        != (  (UTF_CONTINUATION_MARK << 16)
+                            | (UTF_CONTINUATION_MARK << 8)
+                            |  UTF_CONTINUATION_MARK))))
+            {
+                break;
+            }
+
+            uv = FOUR_BYTE_UTF8_TO_NATIVE(s);
+
+            if (UNLIKELY(uv < 16 * (1U << (2 * UTF_ACCUMULATION_SHIFT)))) {
+                break;
+            }
+
+#ifdef EBCDIC /* On EBCDIC platforms 4 bytes covers 0x4000 - 0x3FFFF, which
+                 includes the surrogates and some of the non-characters.
+                 Unlike the ASCII case that tests for these above, this range
+                 extends well into the higher planes */
+            if (UNLIKELY(   UNICODE_IS_32_NONCHARS(uv)
+                         || UNICODE_IS_xFFF_E_F(uv)))
+            {
+                goto is_nonchar;
+            }
+            if (UNLIKELY(UNICODE_IS_SURROGATE(uv))) {
+                goto is_surrogate;
+            }
+#else   /* On ASCII platforms 4 bytes covers the range 0x10000 - 0x1F_FFFF,
+           which includes the rest of the non-characters and some supers */
+            if (UNLIKELY(   UNICODE_IS_xFFF_E_F(uv))
+                         || UNICODE_IS_10_FFF_E_F(uv))
+            {
+                goto is_nonchar;
+            }
+            if (UNLIKELY(UNICODE_IS_SUPER(uv))) {
+                s0 = (U8 *) s;
+                goto is_super;
+            }
+#endif
+            return uv;
+
+        /* It's unclear to me (khw) if we should bother unrolling 5-character
+         * sequences.  On one hand they are very rare in practice, so this
+         * won't speed things up noticeably.  On the other, it's easy, and the
+         * space used is miniscule, and it brings parity with EBCDIC and ASCII,
+         * so that any Unicode-defined code point will be handled quickly.  We
+         * could just #ifdef it for EBCDIC, but its better practice to have
+         * them share code paths whenever possible.  In the end, since I'd
+         * already written this, I left it in, for now */
+        case 5:
+            /* This is equivalent to: if ((v & 0xC0C0C0C0) != 0x80808080) on
+             * ASCII platforms */
+            if (UNLIKELY((((  (NATIVE_UTF8_TO_I8(s[1]) << 24)
+                            | (NATIVE_UTF8_TO_I8(s[2]) << 16)
+                            | (NATIVE_UTF8_TO_I8(s[3]) << 8)
+                            |  NATIVE_UTF8_TO_I8(s[4]))
+                                        & (  (UTF_IS_CONTINUATION_MASK << 24)
+                                           | (UTF_IS_CONTINUATION_MASK << 16)
+                                           | (UTF_IS_CONTINUATION_MASK << 8)
+                                           |  UTF_IS_CONTINUATION_MASK))
+                        != (  (UTF_CONTINUATION_MARK << 24)
+                            | (UTF_CONTINUATION_MARK << 16)
+                            | (UTF_CONTINUATION_MARK << 8)
+                            |  UTF_CONTINUATION_MARK))))
+            {
+                break;
+            }
+
+            uv = FIVE_BYTE_UTF8_TO_NATIVE(s);
+
+            if (UNLIKELY(uv < 8 * (1U << (3 * UTF_ACCUMULATION_SHIFT)))) {
+                break;
+            }
+
+#ifdef  EBCDIC  /* On EBCDIC platforms, 5 bytes covers the range
+                   0x4_0000-0x3F_FFFF which includes the rest of the
+                   non-characters, and some supers */
+            if (UNLIKELY(   UNICODE_IS_xFFF_E_F(uv))
+                         || UNICODE_IS_10_FFF_E_F(uv))
+            {
+                goto is_nonchar;
+            }
+            if (UNLIKELY(UNICODE_IS_SUPER(uv))) {
+                s0 = (U8 *) s;
+                goto is_super;
+            }
+
+            return uv;
+#else   /* On ASCII platforms 5 bytes are all supers */
+            s0 = (U8 *) s;
+            goto is_super;
+#endif
+    }   /* End of switch on munged expected length */
+
+    /* Here, for some reason we couldn't use the unrolled code above.
+     * Calculate using loop-style.  First get non-munged length */
+    expectlen = UTF8SKIP(s);
+    if (retlen) {
+	*retlen = expectlen;
     }
 
     /* A continuation character can't start a valid sequence */
-    if (UNLIKELY(UTF8_IS_CONTINUATION(uv))) {
+    if (UNLIKELY(UTF8_IS_CONTINUATION(*s))) {
 	if (flags & UTF8_ALLOW_CONTINUATION) {
 	    if (retlen) {
 		*retlen = 1;
@@ -768,7 +986,7 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 	}
 
 	if (! (flags & UTF8_CHECK_ONLY)) {
-	    sv = sv_2mortal(Perl_newSVpvf(aTHX_ "%s (unexpected continuation byte 0x%02x, with no preceding start byte)", malformed_text, *s0));
+	    sv = sv_2mortal(Perl_newSVpvf(aTHX_ "%s (unexpected continuation byte 0x%02x, with no preceding start byte)", malformed_text, *s));
 	}
 	curlen = 1;
 	goto malformed;
@@ -777,18 +995,15 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
     /* Here is not a continuation byte, nor an invariant.  The only thing left
      * is a start byte (possibly for an overlong) */
 
-#ifdef EBCDIC
-    uv = NATIVE_UTF8_TO_I8(uv);
-#endif
-
     /* Remove the leading bits that indicate the number of bytes in the
      * character's whole UTF-8 sequence, leaving just the bits that are part of
      * the value */
-    uv &= UTF_START_MASK(expectlen);
+    uv = NATIVE_UTF8_TO_I8(*s) & UTF_START_MASK(expectlen);
 
     /* Now, loop through the remaining bytes in the character's sequence,
      * accumulating each into the working value as we go.  Be sure to not look
      * past the end of the input string */
+    s0 = (U8 *) s;
     send =  (U8*) s0 + ((expectlen <= curlen) ? expectlen : curlen);
 
     for (s = s0 + 1; s < send; s++) {
@@ -904,6 +1119,7 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
                 && ckWARN_d(WARN_DEPRECATED))))
     {
 	if (UNICODE_IS_SURROGATE(uv)) {
+          is_surrogate:
 
             /* By adding UTF8_CHECK_ONLY to the test, we avoid unnecessary
              * generation of the sv, since no warnings are raised under CHECK */
@@ -918,6 +1134,7 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
 	    }
 	}
 	else if ((uv > PERL_UNICODE_MAX)) {
+          is_super:
 	    if ((flags & (UTF8_WARN_SUPER|UTF8_CHECK_ONLY)) == UTF8_WARN_SUPER
                 && ckWARN_d(WARN_NON_UNICODE))
 	    {
@@ -987,6 +1204,7 @@ Perl_utf8n_to_uvchr(pTHX_ const U8 *s, STRLEN curlen, STRLEN *retlen, U32 flags)
             }
 	}
 	else if (UNICODE_IS_NONCHAR(uv)) {
+          is_nonchar:
 	    if ((flags & (UTF8_WARN_NONCHAR|UTF8_CHECK_ONLY)) == UTF8_WARN_NONCHAR
 		&& ckWARN_d(WARN_NONCHAR))
 	    {
