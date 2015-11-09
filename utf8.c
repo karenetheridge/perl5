@@ -1325,12 +1325,11 @@ Perl_utf8_to_uvchr_buf(pTHX_ const U8 *s, const U8 *send, STRLEN *retlen)
  * non-character code points, and non-Unicode code points are allowed. */
 
 UV
-Perl_valid_utf8_to_uvchr(pTHX_ const U8 *s, STRLEN *retlen)
+Perl_valid_utf8_to_uvchr(const U8 *s, STRLEN *retlen)
 {
     const UV expectlen = UTF8SKIP(s);
 
     PERL_ARGS_ASSERT_VALID_UTF8_TO_UVCHR;
-    PERL_UNUSED_CONTEXT;
 
     if (retlen) {
         *retlen = expectlen;
