@@ -73,7 +73,6 @@ foreach (<DATA>) {
 	    unless (is(scalar @warnings, $expect, "Expected number of warnings for $id seen")) {
                 note(join "", "Got:\n", @warnings);
             }
-
 	}
     } else {
 	fail("unknown format '$_'");
