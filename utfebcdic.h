@@ -41,7 +41,7 @@
  *	PL_utf2e, with its inverse being PL_e2utf.  They are constructed so that
  *	all EBCDIC invariants remain invariant, but no others do, and the first
  *	byte of a variant will always have its upper bit set.  But note that
- *	the upper bit of some invariants is also 1.
+ *	the upper bit of some invariants is also 1.  The algorithm also is designed so that bytes that fvariant UTF-EBCDIC characters when compared lexically (but not with invariant ones) sort in code point order.
  *
  *  For example, the ordinal value of 'A' is 193 in EBCDIC, and also is 193 in
  *  UTF-EBCDIC.  Step 1) converts it to 65, Step 2 leaves it at 65, and Step 3
