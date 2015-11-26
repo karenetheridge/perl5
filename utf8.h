@@ -600,6 +600,7 @@ case any call to string overloading updates the internal UTF-8 encoding flag.
 #define UTF8_ALLOW_ANY                                                          \
 	    (~( UTF8_DISALLOW_ILLEGAL_INTERCHANGE|UTF8_DISALLOW_ABOVE_31_BIT    \
                |UTF8_WARN_ILLEGAL_INTERCHANGE|UTF8_WARN_ABOVE_31_BIT))
+/* XXX tghis doesn't look right */
 #define UTF8_ALLOW_ANYUV                                                        \
          (UTF8_ALLOW_EMPTY                                                      \
 	  & ~(UTF8_DISALLOW_ILLEGAL_INTERCHANGE|UTF8_WARN_ILLEGAL_INTERCHANGE))
