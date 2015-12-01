@@ -319,8 +319,14 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
 	*d++ = I8_TO_NATIVE_UTF8(((uv >> ((2 - 1) * SHIFT)) & MASK) |   MARK);
 	*d++ = I8_TO_NATIVE_UTF8(( uv  /* (1 - 1) */        & MASK) |   MARK);
     }
-    /* FALLTHROUGH */                                                           \
 #endif
+
+#ifdef EBCDIC
+    if (uv <= 0x7FFFFFFF) {
+        goto handle_super;
+    }
+#endif
+    /* FALLTHROUGH */                                                           \
 
   handle_above_31_bit:
 
