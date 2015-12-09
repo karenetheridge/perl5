@@ -3152,12 +3152,7 @@ PerlIOStdio_invalidate_fileno(pTHX_ FILE *f)
     f->_file = -1;
     return 1;
 #  elif defined(__FreeBSD__)
-    /* There may be a better way on FreeBSD:
-        - we could insert a dummy func in the _close function entry
-	f->_close = (int (*)(void *)) dummy_close;
-     */
-    f->_file = -1;
-    return 1;
+    return fdclose(f, NULL) == 0 ? 1 : 0;
 #  elif defined(__OpenBSD__)
     /* There may be a better way on OpenBSD:
         - we could insert a dummy func in the _close function entry
