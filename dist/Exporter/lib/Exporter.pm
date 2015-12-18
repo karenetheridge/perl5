@@ -9,7 +9,7 @@ require 5.006;
 our $Debug = 0;
 our $ExportLevel = 0;
 our $Verbose ||= 0;
-our $VERSION = '5.72';
+our $VERSION = '5.73';
 our (%Cache);
 
 sub as_heavy {
@@ -449,6 +449,17 @@ If you are writing a package that C<AUTOLOAD>s, consider forcing
 an C<AUTOLOAD> for any constants explicitly imported by other packages
 or which are usually used when your package is C<use>d.
 
+=head2 RENAMING SYMBOLS ON IMPORT
+
+As of version 5.73 you can rename symbols that you import.
+
+    use Some::Exporter some_sub => { -as => 'new_name' };
+
+    new_name(); # sub 'some_sub' is now present as 'new_name'.
+
+This syntax is consistent with newer exporting tools such as L<Sub::Exporter>
+and L<Exporter::Declare>.
+
 =head1 Good Practices
 
 =head2 Declaring C<@EXPORT_OK> and Friends
@@ -579,6 +590,7 @@ a sample list of such modules.
     Exporter::Tidy
     Sub::Exporter / Sub::Installer
     Perl6::Export / Perl6::Export::Attrs
+    Exporter::Declare
 
 =head1 LICENSE
 

@@ -18,7 +18,7 @@ sub ok ($;$) {
 
 BEGIN {
     $test = 1;
-    print "1..31\n";
+    print "1..34\n";
     require Exporter;
     ok( 1, 'Exporter compiled' );
 }
@@ -243,3 +243,21 @@ sub TIESCALAR{bless[]}
  }
 }
 ::ok(1, 'import with tied $_');
+
+package main::TestRename;
+
+BEGIN {
+    $INC{'main/TestRename/Foo.pm'} = 1;
+    package main::TestRename::Foo;
+
+    our @EXPORT = qw/foo/;
+    use base 'Exporter';
+
+    sub foo { 'foo' }
+}
+
+use main::TestRename::Foo 'foo' => {-as => 'bar'};
+
+::ok(__PACKAGE__->can('bar'), "imported foo as bar");
+::ok(!__PACKAGE__->can('foo'), "Did not import 'foo'");
+::ok(bar() eq 'foo', "bar does what we expect");

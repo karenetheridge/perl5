@@ -145,7 +145,7 @@ sub heavy_export {
 			$cache_is_current = 1;
 		    }
 
-		    if (!$export_cache->{$sym}) {
+ 		    if (!$export_cache->{$sym} && ref($sym) ne 'HASH') {
 			# accumulate the non-exports
 			push @carp,
 			  qq["$sym" is not exported by the $pkg module\n];
@@ -194,13 +194,22 @@ sub heavy_export {
     warn "Importing into $callpkg from $pkg: ",
 		join(", ",sort @imports) if $Exporter::Verbose;
 
-    foreach $sym (@imports) {
-	# shortcut for the common case of no type character
-	(*{"${callpkg}::$sym"} = \&{"${pkg}::$sym"}, next)
-	    unless $sym =~ s/^(\W)//;
-	$type = $1;
+    while (my $sym  = shift @imports) {
+        # First split into sigil and name
+        # We need to take the sigil from the symbol, not the new name where a
+        # sigil is not used.
+        my $type = ($sym =~ s/^(\W)//) ? $1 : '';
+
+        # Update name if an alternative was specified
+        my $spec = (@imports && ref($imports[0]) eq 'HASH') ? shift @imports : undef;
+        my $name = ($spec && $spec->{'-as'}) ? $spec->{'-as'} : $sym;
+
+        # shortcut for the common case of no type character
+        (*{"${callpkg}::$name"} = \&{"${pkg}::$sym"}, next)
+            unless $type;
+
 	no warnings 'once';
-	*{"${callpkg}::$sym"} =
+	*{"${callpkg}::$name"} =
 	    $type eq '&' ? \&{"${pkg}::$sym"} :
 	    $type eq '$' ? \${"${pkg}::$sym"} :
 	    $type eq '@' ? \@{"${pkg}::$sym"} :
