@@ -457,8 +457,8 @@ As of version 5.73 you can rename symbols that you import.
 
     new_name(); # sub 'some_sub' is now present as 'new_name'.
 
-This syntax is consistent with newer exporting tools such as L<Sub::Exporter>
-and L<Exporter::Declare>.
+This syntax is consistent with newer exporting tools such as Sub::Exporter
+and Exporter::Declare.
 
 =head1 Good Practices
 
