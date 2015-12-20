@@ -131,6 +131,7 @@ struct RExC_state_t {
     U32		flags;			/* RXf_* are we folding, multilining? */
     U32		pm_flags;		/* PMf_* stuff from the calling PMOP */
     char	*precomp;		/* uncompiled string. */
+    char	*precomp_end;		/* pointer to end of uncompiled string. */
     REGEXP	*rx_sv;			/* The SV that is the regexp. */
     regexp	*rx;                    /* perl core regexp structure */
     regexp_internal	*rxi;           /* internal data for regexp object
@@ -148,6 +149,7 @@ struct RExC_state_t {
                                            large enough for the largest
                                            non-EXACTish node, so can use it as
                                            scratch in pass1 */
+    IV          precomp_adj;           /* XXX */
     I32		naughty;		/* How bad is this pattern? */
     I32		sawback;		/* Did we see \1, ...? */
     U32		seen;
@@ -220,6 +222,8 @@ struct RExC_state_t {
 #define RExC_flags	(pRExC_state->flags)
 #define RExC_pm_flags	(pRExC_state->pm_flags)
 #define RExC_precomp	(pRExC_state->precomp)
+#define RExC_precomp_adj (pRExC_state->precomp_adj)
+#define RExC_precomp_end (pRExC_state->precomp_end)
 #define RExC_rx_sv	(pRExC_state->rx_sv)
 #define RExC_rx		(pRExC_state->rx)
 #define RExC_rxi	(pRExC_state->rxi)
@@ -556,7 +560,7 @@ static const scan_data_t zero_scan_data =
 
 #define REPORT_LOCATION_ARGS(offset)            \
                 UTF8fARG(UTF, offset, RExC_precomp), \
-                UTF8fARG(UTF, RExC_end - RExC_precomp - offset, RExC_precomp + offset)
+                UTF8fARG(UTF, RExC_precomp_end - RExC_precomp - offset, RExC_precomp + offset)
 
 /* Used to point after bad bytes for an error message, but avoid skipping
  * past a nul byte. */
@@ -569,7 +573,7 @@ static const scan_data_t zero_scan_data =
  */
 #define _FAIL(code) STMT_START {					\
     const char *ellipses = "";						\
-    IV len = RExC_end - RExC_precomp;					\
+    IV len = RExC_precomp_end - RExC_precomp;					\
 									\
     if (!SIZE_ONLY)							\
 	SAVEFREESV(RExC_rx_sv);						\
@@ -594,7 +598,7 @@ static const scan_data_t zero_scan_data =
  */
 #define	Simple_vFAIL(m) STMT_START {					\
     const IV offset =                                                   \
-        (RExC_parse > RExC_end ? RExC_end : RExC_parse) - RExC_precomp; \
+        (RExC_parse > RExC_end ? RExC_precomp_end : RExC_parse - RExC_precomp_adj) - RExC_precomp; \
     Perl_croak(aTHX_ "%s" REPORT_LOCATION,				\
 	    m, REPORT_LOCATION_ARGS(offset));	\
 } STMT_END
@@ -613,7 +617,7 @@ static const scan_data_t zero_scan_data =
  */
 #define	Simple_vFAIL2(m,a1) STMT_START {			            \
     const IV offset                                                         \
-          = (RExC_parse > RExC_end ? RExC_end : RExC_parse) - RExC_precomp; \
+          = (RExC_parse > RExC_end ? RExC_precomp_end : RExC_parse - RExC_precomp_adj) - RExC_precomp; \
     S_re_croak2(aTHX_ UTF, m, REPORT_LOCATION, a1,		            \
                       REPORT_LOCATION_ARGS(offset));	                    \
 } STMT_END
@@ -633,7 +637,7 @@ static const scan_data_t zero_scan_data =
  */
 #define	Simple_vFAIL3(m, a1, a2) STMT_START {                               \
     const IV offset                                                         \
-          = (RExC_parse > RExC_end ? RExC_end : RExC_parse) - RExC_precomp; \
+          = (RExC_parse > RExC_end ? RExC_precomp_end : RExC_parse - RExC_precomp_adj) - RExC_precomp; \
     S_re_croak2(aTHX_ UTF, m, REPORT_LOCATION, a1, a2,                      \
                       REPORT_LOCATION_ARGS(offset));                        \
 } STMT_END
@@ -652,7 +656,7 @@ static const scan_data_t zero_scan_data =
  */
 #define	Simple_vFAIL4(m, a1, a2, a3) STMT_START {		            \
     const IV offset                                                         \
-          = (RExC_parse > RExC_end ? RExC_end : RExC_parse) - RExC_precomp; \
+          = (RExC_parse > RExC_end ? RExC_precomp_end : RExC_parse - RExC_precomp_adj) - RExC_precomp; \
     S_re_croak2(aTHX_ UTF, m, REPORT_LOCATION, a1, a2, a3,                  \
                       REPORT_LOCATION_ARGS(offset));                        \
 } STMT_END
@@ -666,7 +670,7 @@ static const scan_data_t zero_scan_data =
 /* A specialized version of vFAIL2 that works with UTF8f */
 #define vFAIL2utf8f(m, a1) STMT_START {                                     \
     const IV offset                                                         \
-          = (RExC_parse > RExC_end ? RExC_end : RExC_parse) - RExC_precomp; \
+          = (RExC_parse > RExC_end ? RExC_precomp_end : RExC_parse - RExC_precomp_adj) - RExC_precomp; \
     if (!SIZE_ONLY)                                                         \
         SAVEFREESV(RExC_rx_sv);                                             \
     S_re_croak2(aTHX_ UTF, m, REPORT_LOCATION, a1,                          \
@@ -675,7 +679,7 @@ static const scan_data_t zero_scan_data =
 
 #define vFAIL3utf8f(m, a1, a2) STMT_START {                                 \
     const IV offset                                                         \
-          = (RExC_parse > RExC_end ? RExC_end : RExC_parse) - RExC_precomp; \
+          = (RExC_parse > RExC_end ? RExC_precomp_end : RExC_parse - RExC_precomp_adj) - RExC_precomp; \
     if (!SIZE_ONLY)                                                         \
         SAVEFREESV(RExC_rx_sv);                                             \
     S_re_croak2(aTHX_ UTF, m, REPORT_LOCATION, a1, a2,                      \
@@ -690,82 +694,82 @@ static const scan_data_t zero_scan_data =
 
 /* m is not necessarily a "literal string", in this macro */
 #define reg_warn_non_literal_string(loc, m) STMT_START {                \
-    const IV offset = loc - RExC_precomp;                               \
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;                               \
     __ASSERT_(PASS2) Perl_warner(aTHX_ packWARN(WARN_REGEXP), "%s" REPORT_LOCATION,      \
             m, REPORT_LOCATION_ARGS(offset));       \
 } STMT_END
 
 #define	ckWARNreg(loc,m) STMT_START {					\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,	\
 	    REPORT_LOCATION_ARGS(offset));		\
 } STMT_END
 
 #define	vWARN(loc, m) STMT_START {				        \
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,	\
 	    REPORT_LOCATION_ARGS(offset));	        \
 } STMT_END
 
 #define	vWARN_dep(loc, m) STMT_START {				        \
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_warner(aTHX_ packWARN(WARN_DEPRECATED), m REPORT_LOCATION,	\
 	    REPORT_LOCATION_ARGS(offset));	        \
 } STMT_END
 
 #define	ckWARNdep(loc,m) STMT_START {				        \
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner_d(aTHX_ packWARN(WARN_DEPRECATED),	                \
 	    m REPORT_LOCATION,						\
 	    REPORT_LOCATION_ARGS(offset));		\
 } STMT_END
 
 #define	ckWARNregdep(loc,m) STMT_START {				\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner_d(aTHX_ packWARN2(WARN_DEPRECATED, WARN_REGEXP),	\
 	    m REPORT_LOCATION,						\
 	    REPORT_LOCATION_ARGS(offset));		\
 } STMT_END
 
 #define	ckWARN2reg_d(loc,m, a1) STMT_START {				\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner_d(aTHX_ packWARN(WARN_REGEXP),			\
 	    m REPORT_LOCATION,						\
 	    a1, REPORT_LOCATION_ARGS(offset));	\
 } STMT_END
 
 #define	ckWARN2reg(loc, m, a1) STMT_START {				\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,	\
 	    a1, REPORT_LOCATION_ARGS(offset));	\
 } STMT_END
 
 #define	vWARN3(loc, m, a1, a2) STMT_START {				\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,		\
 	    a1, a2, REPORT_LOCATION_ARGS(offset));	\
 } STMT_END
 
 #define	ckWARN3reg(loc, m, a1, a2) STMT_START {				\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,	\
 	    a1, a2, REPORT_LOCATION_ARGS(offset));	\
 } STMT_END
 
 #define	vWARN4(loc, m, a1, a2, a3) STMT_START {				\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,		\
 	    a1, a2, a3, REPORT_LOCATION_ARGS(offset)); \
 } STMT_END
 
 #define	ckWARN4reg(loc, m, a1, a2, a3) STMT_START {			\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_ck_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,	\
 	    a1, a2, a3, REPORT_LOCATION_ARGS(offset)); \
 } STMT_END
 
 #define	vWARN5(loc, m, a1, a2, a3, a4) STMT_START {			\
-    const IV offset = loc - RExC_precomp;				\
+    const IV offset = loc - RExC_precomp_adj - RExC_precomp;				\
     __ASSERT_(PASS2) Perl_warner(aTHX_ packWARN(WARN_REGEXP), m REPORT_LOCATION,		\
 	    a1, a2, a3, a4, REPORT_LOCATION_ARGS(offset)); \
 } STMT_END
@@ -4818,7 +4822,7 @@ S_study_chunk(pTHX_ RExC_state_t *pRExC_state, regnode **scanp,
 		    Perl_ck_warner(aTHX_ packWARN(WARN_REGEXP),
 			"Quantifier unexpected on zero-length expression "
 			"in regex m/%"UTF8f"/",
-			 UTF8fARG(UTF, RExC_end - RExC_precomp,
+			 UTF8fARG(UTF, RExC_precomp_end - RExC_precomp,
 				  RExC_precomp));
 		    (void)ReREFCNT_inc(RExC_rx_sv);
 		}
@@ -6691,6 +6695,7 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
     }
 
     RExC_precomp = exp;
+    RExC_precomp_adj = 0;
     RExC_flags = rx_flags;
     RExC_pm_flags = pm_flags;
 
@@ -6726,6 +6731,7 @@ Perl_re_op_compile(pTHX_ SV ** const patternp, int pat_count,
     RExC_parse = exp;
     RExC_start = exp;
     RExC_end = exp + plen;
+    RExC_precomp_end = RExC_end;
     RExC_naughty = 0;
     RExC_npar = 1;
     RExC_nestroot = 0;
@@ -13549,10 +13555,10 @@ S_handle_regex_sets(pTHX_ RExC_state_t *pRExC_state, SV** return_invlist,
     Perl_ck_warner_d(aTHX_
         packWARN(WARN_EXPERIMENTAL__REGEX_SETS),
         "The regex_sets feature is experimental" REPORT_LOCATION,
-            UTF8fARG(UTF, (RExC_parse - RExC_precomp), RExC_precomp),
+            UTF8fARG(UTF, (RExC_parse - RExC_precomp_adj - RExC_precomp), RExC_precomp),
             UTF8fARG(UTF,
-                     RExC_end - RExC_start - (RExC_parse - RExC_precomp),
-                     RExC_precomp + (RExC_parse - RExC_precomp)));
+                     RExC_precomp_end - RExC_start - (RExC_parse - RExC_precomp_adj - RExC_precomp),
+                     RExC_precomp + (RExC_parse - RExC_precomp_adj - RExC_precomp)));
 
     /* Everything in this construct is a metacharacter.  Operands begin with
      * either a '\' (for an escape sequence), or a '[' for a bracketed
@@ -15470,6 +15476,7 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
 	STRLEN len;
 	char *save_end = RExC_end;
 	char *save_parse = RExC_parse;
+        STRLEN offset_to_original_portion = 0;
         bool first_time = TRUE;     /* First multi-char occurrence doesn't get
                                        a "|" */
         I32 reg_flags;
@@ -15508,6 +15515,7 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
          * multi-character folds, have to include it in recursive parsing */
         if (element_count) {
             sv_catpv(substitute_parse, "|[");
+            offset_to_original_portion = SvCUR(substitute_parse);
             sv_catpvn(substitute_parse, orig_parse, RExC_parse - orig_parse);
             sv_catpv(substitute_parse, "]");
         }
@@ -15523,6 +15531,9 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
 #endif
 
 	RExC_parse = SvPV(substitute_parse, len);
+        RExC_precomp_adj    =   PTR2IV(RExC_parse)
+                              - PTR2IV(orig_parse)
+                              + offset_to_original_portion;
 	RExC_end = RExC_parse + len;
         RExC_in_multi_char_class = 1;
 	RExC_override_recoding = 1;
@@ -15534,6 +15545,7 @@ S_regclass(pTHX_ RExC_state_t *pRExC_state, I32 *flagp, U32 depth,
 
 	RExC_parse = save_parse;
 	RExC_end = save_end;
+        RExC_precomp_adj = 0;
 	RExC_in_multi_char_class = 0;
 	RExC_override_recoding = 0;
         SvREFCNT_dec_NN(multi_char_matches);
