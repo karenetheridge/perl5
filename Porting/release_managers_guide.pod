@@ -292,7 +292,7 @@ Run the tests for the package.
 
 =item *
 
-Run the tests in F<t/porting>.
+Run the tests in F<t/porting> (C<make test_porting>).
 
 =item *
 
