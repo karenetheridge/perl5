@@ -5626,6 +5626,8 @@ utils/perlivp.PL		installation verification procedure
 utils/piconv.PL			iconv(1), reinvented in perl
 utils/pl2pm.PL			A pl to pm translator
 utils/pod2html.PL		Translator to turn pod into HTML
+utils/pod2man.PL		Convert POD data to formatted *roff input
+utils/pod2text.PL		Convert POD data to formatted ASCII text
 utils/prove.PL			The prove harness utility
 utils/ptardiff.PL		The ptardiff utility
 utils/ptargrep.PL		The ptargrep utility
